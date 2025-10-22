@@ -155,6 +155,45 @@
             padding: 20px;
             font-size: 14px;
         }
+
+        .bulk-import {
+            margin-top: 30px;
+            padding: 15px;
+            background: #fafafa;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .bulk-import-title {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 8px;
+        }
+
+        .bulk-import-input {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .bulk-import-input input {
+            flex: 1;
+            padding: 8px;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .btn-secondary {
+            background: #9e9e9e;
+            color: white;
+            padding: 8px 16px;
+            font-size: 12px;
+        }
+
+        .btn-secondary:hover {
+            background: #757575;
+        }
     </style>
 </head>
 <body>
@@ -164,6 +203,14 @@
         <div class="counter-display">
             <div class="counter-number" id="counter">0</div>
             <button class="btn btn-primary" id="incrementBtn">+1</button>
+
+            <div class="bulk-import">
+                <div class="bulk-import-title">過去データの一括追加</div>
+                <div class="bulk-import-input">
+                    <input type="number" id="bulkInput" placeholder="追加する数を入力" min="1" step="1">
+                    <button class="btn btn-secondary" id="bulkAddBtn">追加</button>
+                </div>
+            </div>
         </div>
 
         <div class="section">
@@ -175,7 +222,7 @@
         </div>
 
         <div class="section">
-            <div class="section-title">時間帯別グラフ</div>
+            <div class="section-title">時間帯別グラフ <span id="chartPeriod" style="font-size: 12px; color: #999; font-weight: normal;"></span></div>
             <div class="chart-container">
                 <canvas id="chart" width="600" height="300"></canvas>
             </div>
@@ -196,15 +243,22 @@
             initElements() {
                 this.counterDisplay = document.getElementById('counter');
                 this.incrementBtn = document.getElementById('incrementBtn');
+                this.bulkInput = document.getElementById('bulkInput');
+                this.bulkAddBtn = document.getElementById('bulkAddBtn');
                 this.recordsList = document.getElementById('recordsList');
                 this.recordCount = document.getElementById('recordCount');
                 this.clearBtn = document.getElementById('clearBtn');
+                this.chartPeriod = document.getElementById('chartPeriod');
                 this.canvas = document.getElementById('chart');
                 this.ctx = this.canvas.getContext('2d');
             }
 
             bindEvents() {
                 this.incrementBtn.addEventListener('click', () => this.increment());
+                this.bulkAddBtn.addEventListener('click', () => this.bulkAdd());
+                this.bulkInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.bulkAdd();
+                });
                 this.clearBtn.addEventListener('click', () => this.clearAll());
             }
 
@@ -214,6 +268,32 @@
                 this.records.push(timestamp);
                 this.saveData();
                 this.updateUI();
+            }
+
+            bulkAdd() {
+                const count = parseInt(this.bulkInput.value);
+
+                if (isNaN(count) || count <= 0) {
+                    alert('1以上の数値を入力してください');
+                    return;
+                }
+
+                if (count > 10000) {
+                    alert('一度に追加できるのは10000までです');
+                    return;
+                }
+
+                const fixedDate = new Date('1990-01-01T00:00:00');
+                for (let i = 0; i < count; i++) {
+                    this.records.push(new Date(fixedDate));
+                    this.counter++;
+                }
+
+                this.bulkInput.value = '';
+                this.saveData();
+                this.updateUI();
+
+                alert(`${count}件追加しました`);
             }
 
             deleteRecord(index) {
@@ -271,13 +351,48 @@
                 return `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`;
             }
 
+            getCurrentPeriodStart() {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = now.getMonth();
+                const day = now.getDate();
+                const hour = now.getHours();
+
+                // 9時より前なら前日の9時から
+                if (hour < 9) {
+                    const periodStart = new Date(year, month, day - 1, 9, 0, 0, 0);
+                    return periodStart;
+                }
+                // 9時以降なら今日の9時から
+                else {
+                    const periodStart = new Date(year, month, day, 9, 0, 0, 0);
+                    return periodStart;
+                }
+            }
+
+            getTodayRecords() {
+                const periodStart = this.getCurrentPeriodStart();
+                const nextPeriodStart = new Date(periodStart.getTime() + 24 * 60 * 60 * 1000);
+
+                return this.records.filter(record => {
+                    return record >= periodStart && record < nextPeriodStart;
+                });
+            }
+
             drawChart() {
                 const hourCounts = new Array(24).fill(0);
+                const todayRecords = this.getTodayRecords();
 
-                this.records.forEach(record => {
+                todayRecords.forEach(record => {
                     const hour = record.getHours();
                     hourCounts[hour]++;
                 });
+
+                // 期間表示を更新
+                const periodStart = this.getCurrentPeriodStart();
+                const nextPeriodStart = new Date(periodStart.getTime() + 24 * 60 * 60 * 1000);
+                const formatDate = (d) => `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:00`;
+                this.chartPeriod.textContent = `(${formatDate(periodStart)} - ${formatDate(nextPeriodStart)})`;
 
                 const canvas = this.canvas;
                 const ctx = this.ctx;
@@ -310,20 +425,23 @@
                     ctx.fillText(value, padding - 5, y + 4);
                 }
 
-                hourCounts.forEach((count, hour) => {
-                    const x = padding + hour * barWidth;
+                // 9時始まりで描画（9, 10, 11, ..., 23, 0, 1, ..., 8）
+                for (let i = 0; i < 24; i++) {
+                    const hour = (i + 9) % 24;
+                    const count = hourCounts[hour];
+                    const x = padding + i * barWidth;
                     const barHeight = (count / maxCount) * chartHeight;
                     const y = padding + chartHeight - barHeight;
 
                     ctx.fillStyle = '#2196F3';
                     ctx.fillRect(x + 2, y, barWidth - 4, barHeight);
 
-                    if (hour % 3 === 0) {
+                    if (i % 3 === 0) {
                         ctx.fillStyle = '#666';
                         ctx.textAlign = 'center';
                         ctx.fillText(hour + '時', x + barWidth / 2, height - padding + 20);
                     }
-                });
+                }
 
                 ctx.strokeStyle = '#333';
                 ctx.lineWidth = 2;
