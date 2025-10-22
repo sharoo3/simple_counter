@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>シンプルカウンター</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+
+        .counter-display {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .counter-number {
+            font-size: 72px;
+            font-weight: bold;
+            color: #2196F3;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            max-width: 300px;
+            margin: 0 auto 20px;
+            padding: 20px;
+            font-size: 18px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #2196F3;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1976D2;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(33, 150, 243, 0.4);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn-danger {
+            background: #f44336;
+            color: white;
+            font-size: 14px;
+            padding: 10px;
+            max-width: 200px;
+        }
+
+        .btn-danger:hover {
+            background: #d32f2f;
+        }
+
+        .section {
+            margin-top: 40px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #2196F3;
+        }
+
+        .records-list {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #f9f9f9;
+            border-radius: 6px;
+        }
+
+        .record-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            margin-bottom: 5px;
+            background: white;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .record-time {
+            color: #666;
+        }
+
+        .btn-delete {
+            background: #ff5252;
+            color: white;
+            border: none;
+            padding: 4px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .btn-delete:hover {
+            background: #ff1744;
+        }
+
+        .chart-container {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 6px;
+        }
+
+        canvas {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .empty-message {
+            text-align: center;
+            color: #999;
+            padding: 20px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>シンプルカウンター</h1>
+
+        <div class="counter-display">
+            <div class="counter-number" id="counter">0</div>
+            <button class="btn btn-primary" id="incrementBtn">+1</button>
+        </div>
+
+        <div class="section">
+            <div class="section-title">記録 (<span id="recordCount">0</span>件)</div>
+            <div class="records-list" id="recordsList">
+                <div class="empty-message">まだ記録がありません</div>
+            </div>
+            <button class="btn btn-danger" id="clearBtn">すべて削除</button>
+        </div>
+
+        <div class="section">
+            <div class="section-title">時間帯別グラフ</div>
+            <div class="chart-container">
+                <canvas id="chart" width="600" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class CounterApp {
+            constructor() {
+                this.counter = 0;
+                this.records = [];
+                this.loadData();
+                this.initElements();
+                this.bindEvents();
+                this.updateUI();
+            }
+
+            initElements() {
+                this.counterDisplay = document.getElementById('counter');
+                this.incrementBtn = document.getElementById('incrementBtn');
+                this.recordsList = document.getElementById('recordsList');
+                this.recordCount = document.getElementById('recordCount');
+                this.clearBtn = document.getElementById('clearBtn');
+                this.canvas = document.getElementById('chart');
+                this.ctx = this.canvas.getContext('2d');
+            }
+
+            bindEvents() {
+                this.incrementBtn.addEventListener('click', () => this.increment());
+                this.clearBtn.addEventListener('click', () => this.clearAll());
+            }
+
+            increment() {
+                this.counter++;
+                const timestamp = new Date();
+                this.records.push(timestamp);
+                this.saveData();
+                this.updateUI();
+            }
+
+            deleteRecord(index) {
+                this.records.splice(index, 1);
+                this.counter = this.records.length;
+                this.saveData();
+                this.updateUI();
+            }
+
+            clearAll() {
+                if (this.records.length === 0) return;
+                if (confirm('すべての記録を削除しますか?')) {
+                    this.counter = 0;
+                    this.records = [];
+                    this.saveData();
+                    this.updateUI();
+                }
+            }
+
+            updateUI() {
+                this.counterDisplay.textContent = this.counter;
+                this.updateRecordsList();
+                this.drawChart();
+            }
+
+            updateRecordsList() {
+                this.recordCount.textContent = this.records.length;
+
+                if (this.records.length === 0) {
+                    this.recordsList.innerHTML = '<div class="empty-message">まだ記録がありません</div>';
+                    return;
+                }
+
+                const sortedRecords = [...this.records].sort((a, b) => b - a);
+
+                this.recordsList.innerHTML = sortedRecords.map((record, index) => {
+                    const originalIndex = this.records.indexOf(record);
+                    const timeStr = this.formatTime(record);
+                    return `
+                        <div class="record-item">
+                            <span class="record-time">${timeStr}</span>
+                            <button class="btn-delete" onclick="app.deleteRecord(${originalIndex})">削除</button>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            formatTime(date) {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                const seconds = String(date.getSeconds()).padStart(2, '0');
+                return `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`;
+            }
+
+            drawChart() {
+                const hourCounts = new Array(24).fill(0);
+
+                this.records.forEach(record => {
+                    const hour = record.getHours();
+                    hourCounts[hour]++;
+                });
+
+                const canvas = this.canvas;
+                const ctx = this.ctx;
+                const width = canvas.width;
+                const height = canvas.height;
+                const padding = 40;
+                const chartWidth = width - padding * 2;
+                const chartHeight = height - padding * 2;
+
+                ctx.clearRect(0, 0, width, height);
+
+                ctx.fillStyle = '#333';
+                ctx.font = '12px sans-serif';
+
+                const maxCount = Math.max(...hourCounts, 1);
+                const barWidth = chartWidth / 24;
+
+                ctx.strokeStyle = '#ddd';
+                ctx.lineWidth = 1;
+                for (let i = 0; i <= 5; i++) {
+                    const y = padding + (chartHeight / 5) * i;
+                    ctx.beginPath();
+                    ctx.moveTo(padding, y);
+                    ctx.lineTo(width - padding, y);
+                    ctx.stroke();
+
+                    const value = Math.round(maxCount * (5 - i) / 5);
+                    ctx.fillStyle = '#666';
+                    ctx.textAlign = 'right';
+                    ctx.fillText(value, padding - 5, y + 4);
+                }
+
+                hourCounts.forEach((count, hour) => {
+                    const x = padding + hour * barWidth;
+                    const barHeight = (count / maxCount) * chartHeight;
+                    const y = padding + chartHeight - barHeight;
+
+                    ctx.fillStyle = '#2196F3';
+                    ctx.fillRect(x + 2, y, barWidth - 4, barHeight);
+
+                    if (hour % 3 === 0) {
+                        ctx.fillStyle = '#666';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(hour + '時', x + barWidth / 2, height - padding + 20);
+                    }
+                });
+
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(padding, padding, chartWidth, chartHeight);
+            }
+
+            saveData() {
+                const data = {
+                    counter: this.counter,
+                    records: this.records.map(r => r.toISOString())
+                };
+                localStorage.setItem('counterAppData', JSON.stringify(data));
+            }
+
+            loadData() {
+                const data = localStorage.getItem('counterAppData');
+                if (data) {
+                    const parsed = JSON.parse(data);
+                    this.counter = parsed.counter || 0;
+                    this.records = parsed.records.map(r => new Date(r));
+                }
+            }
+        }
+
+        const app = new CounterApp();
+    </script>
+</body>
+</html>
